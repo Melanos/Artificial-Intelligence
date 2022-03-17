@@ -1,0 +1,136 @@
+import ssl
+
+import torch
+import torchvision
+from torchvision import models, transforms
+
+ssl._create_default_https_context = ssl._create_unverified_context
+
+transform = transforms.Compose(
+    [transforms.ToTensor(),
+     #transforms.Normalize((0.4, 0.4, 0.4), (0.3, 0.3, 0.3))])
+     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+batch_size = 4
+
+trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=False, transform=transform)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                          shuffle=True, num_workers=2)
+
+testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                       download=False, transform=transform)
+testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                         shuffle=False, num_workers=2)
+
+classes = ('plane', 'car', 'bird', 'cat',
+           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+# Change structure of the network resnet18/50
+# Make sure we can freeze layers
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+# functions to show an image
+
+
+def imshow(img):
+    img = img / 2 + 0.5  # unnormalize
+    npimg = img.numpy()
+    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.show()
+
+
+if __name__ == '__main__':
+
+    import torch.nn as nn
+
+    model_ft = models.resnet18(pretrained=True)
+    for param in model_ft.parameters():
+        param.requires_grad = False
+    num_ftrs = model_ft.fc.in_features
+    # Here the size of each output sample is set to 2.
+    # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
+    model_ft.fc = nn.Linear(num_ftrs, 10)
+
+    device = torch.device('cuda:0')
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model_ft = model_ft.to(device)
+
+    criterion = nn.CrossEntropyLoss()
+
+    # Observe that all parameters are being optimized
+    # optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+
+    # Decay LR by a factor of 0.1 every 7 epochs
+    # exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+
+    import torch.optim as optim
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+
+    for epoch in range(25):  # loop over the dataset multiple times
+
+        running_loss = 0.0
+        for i, data in enumerate(trainloader, 0):
+            # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = data
+
+            # zero the parameter gradients
+            optimizer.zero_grad()
+
+            # forward + backward + optimize
+            # outputs = model_ft(inputs)
+            # loss = criterion(outputs, labels)
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+
+            with torch.set_grad_enabled(__name__ == '__main__'):
+                outputs = model_ft(inputs)
+                _, preds = torch.max(outputs, 1)
+                loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            # print statistics
+            running_loss += loss.item()
+            if i % 2000 == 1999:  # print every 2000 mini-batches
+                print('[%d, %5d] loss: %.3f' %
+                      (epoch + 1, i + 1, running_loss / 2000))
+                running_loss = 0.0
+
+    print('Finished Training')
+
+    PATH = './cifar_net.pth'
+    torch.save(model_ft.state_dict(), PATH)
+
+    model_ft.load_state_dict(torch.load(PATH))
+
+    correct = 0
+    total = 0
+    # since we're not training, we don't need to calculate the gradients for our outputs
+    with torch.no_grad():
+        for data in trainloader:
+            images, labels = data
+            images = images.to(device)
+            labels = labels.to(device)
+            # calculate outputs by running images through the network
+            outputs = model_ft(images)
+            # the class with the highest energy is what we choose as prediction
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    print('Accuracy of the network on the 10000 test images: %d %%' % (
+            100 * correct / total))
+
+    dataiter = iter(testloader)
+    images, labels = dataiter.next()
+
+    # print images
+    print('GroundTruth: ', ' '.join('%5s' % classes[labels[j]] for j in range(4)))
+    imshow(torchvision.utils.make_grid(images))
